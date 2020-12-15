@@ -61,9 +61,12 @@ let api = function Binance( options = {} ) {
         recvWindow: 5000,
         useServerTime: false,
         reconnect: true,
+        keepAlive: true,
         verbose: false,
         test: false,
         hedgeMode: false,
+        localAddress: false,
+        family: false,
         log: function ( ...args ) {
             console.log( Array.prototype.slice.call( args ) );
         }
@@ -95,6 +98,9 @@ let api = function Binance( options = {} ) {
         if ( typeof Binance.options.hedgeMode === 'undefined' ) Binance.options.hedgeMode = default_options.hedgeMode;
         if ( typeof Binance.options.log === 'undefined' ) Binance.options.log = default_options.log;
         if ( typeof Binance.options.verbose === 'undefined' ) Binance.options.verbose = default_options.verbose;
+        if ( typeof Binance.options.keepAlive === 'undefined' ) Binance.options.keepAlive = default_options.keepAlive;
+        if ( typeof Binance.options.localAddress === 'undefined' ) Binance.options.localAddress = default_options.localAddress;
+        if ( typeof Binance.options.family === 'undefined' ) Binance.options.localAddress = default_options.family;
         if ( typeof Binance.options.urls !== 'undefined' ) {
             const { urls } = Binance.options;
             if ( typeof urls.base === 'string' ) base = urls.base;
@@ -187,7 +193,10 @@ let api = function Binance( options = {} ) {
         url: url,
         qs: data,
         method: method,
+        family: Binance.options.family,
+        localAddress: Binance.options.localAddress,
         timeout: Binance.options.recvWindow,
+        forever: Binance.options.keepAlive,
         headers: {
             'User-Agent': userAgent,
             'Content-type': contentType,
@@ -198,7 +207,10 @@ let api = function Binance( options = {} ) {
         url: url,
         form: data,
         method: method,
+        family: Binance.options.family,
+        localAddress: Binance.options.localAddress,
         timeout: Binance.options.recvWindow,
+        forever: Binance.options.keepAlive,
         qsStringifyOptions: {
           arrayFormat: 'repeat'
         },
@@ -294,11 +306,12 @@ let api = function Binance( options = {} ) {
         let signature = crypto.createHmac( 'sha256', Binance.options.APISECRET ).update( query ).digest( 'hex' ); // set the HMAC hash header
         if ( method === 'POST' ) {
             let opt = reqObjPOST(
-                url + '?signature=' + signature,
+                url,
                 data,
                 method,
                 Binance.options.APIKEY
             );
+            opt.form.signature = signature;
             proxyRequest( opt, callback );
         } else {
             let opt = reqObj(
@@ -342,6 +355,9 @@ let api = function Binance( options = {} ) {
             opt.stopLimitPrice = flags.stopLimitPrice;
             opt.stopLimitTimeInForce = 'GTC';
             delete opt.type;
+            if ( typeof flags.listClientOrderId !== 'undefined' ) opt.listClientOrderId = flags.listClientOrderId;
+            if ( typeof flags.limitClientOrderId !== 'undefined' ) opt.limitClientOrderId = flags.limitClientOrderId;
+            if ( typeof flags.stopClientOrderId !== 'undefined' ) opt.stopClientOrderId = flags.stopClientOrderId;
         }
         if ( typeof flags.timeInForce !== 'undefined' ) opt.timeInForce = flags.timeInForce;
         if ( typeof flags.newOrderRespType !== 'undefined' ) opt.newOrderRespType = flags.newOrderRespType;
@@ -1888,6 +1904,101 @@ let api = function Binance( options = {} ) {
         }
         return friendlyData( data );
     }
+    
+    /**
+   * Converts the delivery UserData stream ORDER_TRADE_UPDATE data into a friendly object
+   * @param {object} data - user data callback data type
+   * @return {object} - user friendly data type
+   */
+  const dUserDataOrderUpdateConvertData = (data) => {
+    let {
+      e: eventType,
+      E: eventTime,
+      T: transaction, // transaction time
+      o: order,
+    } = data;
+
+    let orderConverter = (order) => {
+      let {
+        s: symbol,
+        c: clientOrderId,
+        // special client order id:
+        // starts with "autoclose-": liquidation order
+        // "adl_autoclose": ADL auto close order
+        S: side,
+        o: orderType,
+        f: timeInForce,
+        q: originalQuantity,
+        p: originalPrice,
+        ap: averagePrice,
+        sp: stopPrice, // please ignore with TRAILING_STOP_MARKET order,
+        x: executionType,
+        X: orderStatus,
+        i: orderId,
+        l: orderLastFilledQuantity,
+        z: orderFilledAccumulatedQuantity,
+        L: lastFilledPrice,
+        ma: marginAsset,
+        N: commissionAsset, // will not push if no commission
+        n: commission, // will not push if no commission
+        T: orderTradeTime,
+        t: tradeId,
+        rp: realizedProfit,
+        b: bidsNotional,
+        a: askNotional,
+        m: isMakerSide, // is this trade maker side
+        R: isReduceOnly, // is this reduce only
+        wt: stopPriceWorkingType,
+        ot: originalOrderType,
+        ps: positionSide,
+        cp: closeAll, // if close-all, pushed with conditional order
+        AP: activationPrice, // only pushed with TRAILING_STOP_MARKET order
+        cr: callbackRate, // only pushed with TRAILING_STOP_MARKET order
+        pP: priceProtect, // If conditional order trigger is protected
+      } = order;
+      return {
+        symbol,
+        clientOrderId,
+        side,
+        orderType,
+        timeInForce,
+        originalQuantity,
+        originalPrice,
+        averagePrice,
+        stopPrice,
+        executionType,
+        orderStatus,
+        orderId,
+        orderLastFilledQuantity,
+        orderFilledAccumulatedQuantity,
+        lastFilledPrice,
+        marginAsset,
+        commissionAsset,
+        commission,
+        orderTradeTime,
+        tradeId,
+        bidsNotional,
+        askNotional,
+        isMakerSide,
+        isReduceOnly,
+        stopPriceWorkingType,
+        originalOrderType,
+        positionSide,
+        closeAll,
+        activationPrice,
+        callbackRate,
+        realizedProfit,
+        priceProtect,
+      };
+    };
+    order = orderConverter(order);
+    return {
+      eventType,
+      eventTime,
+      transaction,
+      order,
+    };
+  };
 
     /**
      * Used as part of the user data websockets callback
@@ -1950,6 +2061,34 @@ let api = function Binance( options = {} ) {
             Binance.options.log( 'Unexpected userFutureData: ' + type );
         }
     };
+    
+   /**
+   * Used as part of the user data websockets callback
+   * @param {object} data - user data callback data type
+   * @return {undefined}
+   */
+      const userDeliveryDataHandler = (data) => {
+        let type = data.e;
+        if (type === "MARGIN_CALL") {
+          Binance.options.delivery_margin_call_callback(
+            fUserDataMarginConvertData(data)
+          );
+        } else if (type === "ACCOUNT_UPDATE") {
+          if (Binance.options.delivery_account_update_callback) {
+            Binance.options.delivery_account_update_callback(
+              fUserDataAccountUpdateConvertData(data)
+            );
+          }
+        } else if (type === "ORDER_TRADE_UPDATE") {
+          if (Binance.options.delivery_order_update_callback) {
+            Binance.options.delivery_order_update_callback(
+              dUserDataOrderUpdateConvertData(data)
+            );
+          }
+        } else {
+          Binance.options.log("Unexpected userDeliveryData: " + type);
+        }
+      };
 
     /**
      * Converts the previous day stream into friendly object
@@ -2310,8 +2449,7 @@ let api = function Binance( options = {} ) {
      * @return {boolean} - true or false
      */
     const isArrayUnique = array => {
-        let s = new Set( array );
-        return s.size === array.length;
+        return new Set( array ).size === array.length;
     };
     return {
         /**
@@ -2425,16 +2563,14 @@ let api = function Binance( options = {} ) {
             let object = {}, count = 0, cache;
             if ( typeof symbol === 'object' ) cache = symbol;
             else cache = getDepthCache( symbol ).bids;
-            let sorted = Object.keys( cache ).sort( function ( a, b ) {
-                return parseFloat( b ) - parseFloat( a )
-            } );
+            const sorted = Object.keys( cache ).sort( ( a, b ) => parseFloat( b ) - parseFloat( a ) );
             let cumulative = 0;
             for ( let price of sorted ) {
-                if ( baseValue === 'cumulative' ) {
-                    cumulative += parseFloat( cache[price] );
+                if ( !baseValue ) object[price] = cache[price];
+                else if ( baseValue === 'cumulative' ) {
+                    cumulative += cache[price];
                     object[price] = cumulative;
-                } else if ( !baseValue ) object[price] = parseFloat( cache[price] );
-                else object[price] = parseFloat( ( cache[price] * parseFloat( price ) ).toFixed( 8 ) );
+                } else object[price] = parseFloat( ( cache[price] * parseFloat( price ) ).toFixed( 8 ) );
                 if ( ++count >= max ) break;
             }
             return object;
@@ -2451,16 +2587,14 @@ let api = function Binance( options = {} ) {
             let object = {}, count = 0, cache;
             if ( typeof symbol === 'object' ) cache = symbol;
             else cache = getDepthCache( symbol ).asks;
-            let sorted = Object.keys( cache ).sort( function ( a, b ) {
-                return parseFloat( a ) - parseFloat( b );
-            } );
+            const sorted = Object.keys( cache ).sort( ( a, b ) => parseFloat( a ) - parseFloat( b ) );
             let cumulative = 0;
             for ( let price of sorted ) {
-                if ( baseValue === 'cumulative' ) {
-                    cumulative += parseFloat( cache[price] );
+                if ( !baseValue ) object[price] = cache[price];
+                else if ( baseValue === 'cumulative' ) {
+                    cumulative += cache[price];
                     object[price] = cumulative;
-                } else if ( !baseValue ) object[price] = parseFloat( cache[price] );
-                else object[price] = parseFloat( ( cache[price] * parseFloat( price ) ).toFixed( 8 ) );
+                } else object[price] = parseFloat( ( cache[price] * parseFloat( price ) ).toFixed( 8 ) );
                 if ( ++count >= max ) break;
             }
             return object;
@@ -2491,7 +2625,7 @@ let api = function Binance( options = {} ) {
         * @return {array} - the array of entires
         */
         slice: function ( object, start = 0 ) {
-            return Object.entries( object ).slice( start ).map( entry => entry[0] );
+            return Object.keys( object ).slice( start );
         },
 
         /**
@@ -3102,8 +3236,8 @@ let api = function Binance( options = {} ) {
           signedRequest(sapi + 'v1/asset/dust', { asset: assets }, callback, 'POST');
         },
 
-        assetDividendRecord: function (callback) {
-          signedRequest(sapi + 'v1/asset/assetDividend', {}, callback);
+        assetDividendRecord: function (callback, params = {}) {
+          signedRequest(sapi + 'v1/asset/assetDividend', params, callback);
         },
 
         /**
@@ -3872,6 +4006,16 @@ let api = function Binance( options = {} ) {
             let params = Object.assign( { asset, amount, type } );
             return promiseRequest( 'v1/futures/transfer', params, { base:sapi, type:'SIGNED', method:'POST' } );
         },
+
+        futuresHistDataId: async ( symbol = false, params = {} ) => {
+            if (symbol) params.symbol = symbol;
+            return promiseRequest( 'v1/futuresHistDataId', params, {base: sapi, type: 'SIGNED', method: 'POST'} )
+        },
+
+        futuresDownloadLink: async (downloadId) => {
+            return promiseRequest( 'v1/downloadLink', { downloadId }, {base: sapi, type: 'SIGNED'} )
+        },
+
         // futures websockets support: ticker bookTicker miniTicker aggTrade markPrice
         /* TODO: https://binance-docs.github.io/apidocs/futures/en/#change-log
         Cancel multiple orders DELETE /fapi/v1/batchOrders
@@ -4453,7 +4597,7 @@ let api = function Binance( options = {} ) {
                 symbol = false;
             }
             let reconnect = () => {
-                if ( Binance.options.reconnect ) fMarkPriceStream( symbol, callback );
+                if ( Binance.options.reconnect ) fMarkPriceStream( symbol, callback, speed);
             };
             const endpoint = symbol ? `${ symbol.toLowerCase() }@markPrice` : '!markPrice@arr'
             let subscription = futuresSubscribeSingle( endpoint + speed, data => callback( fMarkPriceConvertData( data ) ), { reconnect } );
@@ -4969,6 +5113,69 @@ let api = function Binance( options = {} ) {
                     if ( subscribed_callback ) subscribed_callback( subscription.endpoint );
                 }, 'POST' );
             },
+            
+            /**
+           * Delivery Userdata websockets function
+           * @param {function} margin_call_callback
+           * @param {function} account_update_callback
+           * @param {function} order_update_callback
+           * @param {Function} subscribed_callback - subscription callback
+           */
+          userDeliveryData: function userDeliveryData(
+            margin_call_callback,
+            account_update_callback = undefined,
+            order_update_callback = undefined,
+            subscribed_callback = undefined
+          ) {
+            const url = Binance.options.test ? dapiTest : dapi;
+
+            let reconnect = () => {
+              if (Binance.options.reconnect)
+                userDeliveryData(
+                  margin_call_callback,
+                  account_update_callback,
+                  order_update_callback,
+                  subscribed_callback
+                );
+            };
+
+            apiRequest(
+              url + "v1/listenKey",
+              {},
+              function (error, response) {
+                Binance.options.listenDeliveryKey = response.listenKey;
+                setTimeout(function userDataKeepAlive() {
+                  // keepalive
+                  try {
+                    apiRequest(
+                      url +
+                        "v1/listenKey?listenKey=" +
+                        Binance.options.listenDeliveryKey,
+                      {},
+                      function (err) {
+                        if (err) setTimeout(userDataKeepAlive, 60000);
+                        // retry in 1 minute
+                        else setTimeout(userDataKeepAlive, 60 * 30 * 1000); // 30 minute keepalive
+                      },
+                      "PUT"
+                    );
+                  } catch (error) {
+                    setTimeout(userDataKeepAlive, 60000); // retry in 1 minute
+                  }
+                }, 60 * 30 * 1000); // 30 minute keepalive
+                Binance.options.delivery_margin_call_callback = margin_call_callback;
+                Binance.options.delivery_account_update_callback = account_update_callback;
+                Binance.options.delivery_order_update_callback = order_update_callback;
+                const subscription = deliverySubscribe(
+                  Binance.options.listenDeliveryKey,
+                  userDeliveryDataHandler,
+                  { reconnect }
+                );
+                if (subscribed_callback) subscribed_callback(subscription.endpoint);
+              },
+              "POST"
+            );
+          },
 
             /**
              * Subscribe to a generic websocket
