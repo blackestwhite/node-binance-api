@@ -821,6 +821,43 @@ describe('Deposit address', function () {
   }).timeout(TIMEOUT);
 });
 
+describe('Deposit address network', function () {
+  it('Attempt to get deposit address for USDT on TRX network', function (done) {
+    binance.depositAddress('USDT', 'TRX', (error, result) => {
+      debug(error);
+      debug(result);
+      assert(typeof (error) === 'object', WARN_SHOULD_BE_OBJ);
+      assert(typeof (result) === 'object', WARN_SHOULD_BE_OBJ);
+      assert(error === null, WARN_SHOULD_BE_NULL);
+      assert(result !== null, WARN_SHOULD_BE_NOT_NULL);
+      assert(Object.prototype.hasOwnProperty.call(result, 'address'), WARN_SHOULD_HAVE_KEY + 'address');
+      assert(Object.prototype.hasOwnProperty.call(result, 'success'), WARN_SHOULD_HAVE_KEY + 'success');
+      assert(Object.prototype.hasOwnProperty.call(result, 'addressTag'), WARN_SHOULD_HAVE_KEY + 'addressTag');
+      assert(Object.prototype.hasOwnProperty.call(result, 'asset'), WARN_SHOULD_HAVE_KEY + 'asset');
+      assert(result.asset === 'BTC');
+      assert(result.success === true);
+      done();
+    });
+  }).timeout(TIMEOUT);
+
+  it('Attempt to get deposit address for USDT on ETH network', function (done) {
+    binance.depositAddress('USDT', 'ETH', (error, result) => {
+      debug(error);
+      debug(result);
+      assert(typeof (error) === 'object', WARN_SHOULD_BE_OBJ);
+      assert(typeof (result) === 'object', WARN_SHOULD_BE_OBJ);
+      assert(error === null, WARN_SHOULD_BE_NULL);
+      assert(result !== null, WARN_SHOULD_BE_NOT_NULL);
+      assert(Object.prototype.hasOwnProperty.call(result, 'address') === false, WARN_SHOULD_NOT_HAVE_KEY + 'address');
+      assert(Object.prototype.hasOwnProperty.call(result, 'success'), WARN_SHOULD_NOT_HAVE_KEY + 'success');
+      assert(Object.prototype.hasOwnProperty.call(result, 'addressTag') === false, WARN_SHOULD_NOT_HAVE_KEY + 'addressTag');
+      assert(Object.prototype.hasOwnProperty.call(result, 'asset') === false, WARN_SHOULD_NOT_HAVE_KEY + 'asset');
+      assert(result.success === false);
+      done();
+    });
+  }).timeout(TIMEOUT);
+});
+
 describe('Account status', function () {
   it('Attempt to get account status', function (done) {
     binance.accountStatus((error, data) => {
