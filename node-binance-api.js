@@ -3370,7 +3370,7 @@ let api = function Binance( options = {} ) {
         * @param {function} callback - the callback function
         * @return {promise or undefined} - omitting the callback returns a promise
         */
-       depositAddress: function ( coin, network, callback ) {
+       depositAddressNetwork: function ( coin, network, callback ) {
         if ( !callback ) {
             return new Promise( ( resolve, reject ) => {
                 callback = ( error, response ) => {
