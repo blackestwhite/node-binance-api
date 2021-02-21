@@ -1794,6 +1794,13 @@ binance.depositAddress("XMR", (error, response) => {
 });
 ```
 
+#### Get Deposit Address of a Token on a Specific Network
+```js
+binance.depositAddressNetwork("USDT", "TRX", (error, response) => {
+  console.info(response);
+});
+```
+
 #### Get All Deposit History
 ```js
 binance.depositHistory((error, response) => {
