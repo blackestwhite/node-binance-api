@@ -3364,6 +3364,30 @@ let api = function Binance( options = {} ) {
         },
 
         /**
+        * Get the deposit address for given coin
+        * @param {string} coin - the coin/token
+        * @param {string} network - the network 
+        * @param {function} callback - the callback function
+        * @return {promise or undefined} - omitting the callback returns a promise
+        */
+       depositAddress: function ( coin, network, callback ) {
+        if ( !callback ) {
+            return new Promise( ( resolve, reject ) => {
+                callback = ( error, response ) => {
+                    if ( error ) {
+                        reject( error );
+                    } else {
+                        resolve( response );
+                    }
+                }
+                signedRequest( sapi + 'v1/capital/deposit/address', { coin: coin, network: network }, callback );
+            } )
+        } else {
+            signedRequest( sapi + 'v1/capital/deposit/address', { coin: coin, network: network }, callback );
+        }
+    },
+
+        /**
         * Get the account status
         * @param {function} callback - the callback function
         * @return {promise or undefined} - omitting the callback returns a promise
