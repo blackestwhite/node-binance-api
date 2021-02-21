@@ -823,7 +823,7 @@ describe('Deposit address', function () {
 
 describe('Deposit address network', function () {
   it('Attempt to get deposit address for USDT on TRX network', function (done) {
-    binance.depositAddress('USDT', 'TRX', (error, result) => {
+    binance.depositAddressNetwork('USDT', 'TRX', (error, result) => {
       debug(error);
       debug(result);
       assert(typeof (error) === 'object', WARN_SHOULD_BE_OBJ);
